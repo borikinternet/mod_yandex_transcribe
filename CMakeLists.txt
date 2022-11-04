@@ -47,10 +47,11 @@ find_package(Boost REQUIRED COMPONENTS unit_test_framework)
 
 configure_file(tests/config.h.in tests/config.h)
 
-add_executable(iamtoken_tests EXCLUDE_FROM_ALL tests/iamtoken_tests.cpp src/YandexSttSession.cpp)
+add_executable(iamtoken_tests EXCLUDE_FROM_ALL tests/iamtoken_tests.cpp)
 target_sources(iamtoken_tests PRIVATE
         tests/iamtoken_tests.cpp
-        src/YandexIamToken.cpp)
+        src/YandexIamToken.cpp
+        src/YandexSttSession.cpp)
 target_include_directories(iamtoken_tests PRIVATE
         include
         ${Boost_INCLUDE_DIRS}
@@ -67,12 +68,13 @@ target_link_directories(iamtoken_tests PRIVATE
 target_link_libraries(iamtoken_tests
         ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
         ${SW_LINK_LIBRARIES}
+        ssl
+        curl
+        crypto
         yandex_cloudapi_obj
         gRPC::grpc++
         gRPC::grpc++_reflection
-        protobuf::libprotobuf
-        curl
-        crypto)
+        protobuf::libprotobuf)
 target_compile_options(iamtoken_tests PRIVATE
         ${SW_CFLAGS})
 

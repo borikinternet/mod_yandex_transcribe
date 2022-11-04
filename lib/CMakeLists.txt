@@ -9,8 +9,7 @@ FetchContent_Declare(NLOHMANN_JSON
 FetchContent_Declare(YANDEX_GRPC
         GIT_REPOSITORY https://github.com/borikinternet/yandex-cloudapi.git)
 FetchContent_Declare(JWT_CPP
-        GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
-        GIT_TAG 4a537e9)
+        GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git)
 FetchContent_Declare(HINNANT_DATE_CPP
         GIT_REPOSITORY https://github.com/HowardHinnant/date.git
         GIT_TAG cac99da8dc88be719a728dc1b597b0ac307c1800)

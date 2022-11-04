@@ -18,12 +18,8 @@ struct fixt {
 	                    "https://iam.api.cloud.yandex.net/iam/v1/tokens"};
 };
 
-BOOST_AUTO_TEST_CASE(connection_test)
+BOOST_FIXTURE_TEST_CASE(connection_test, fixt)
 {
-	ysg_config_t config{"aje95nign4v8tj6cl49f", "ajenj092br8692njemn0",
-	                    PROJECT_SOURCE_DIR "/conf/speechkit_id.pub",
-	                    PROJECT_SOURCE_DIR "/conf/speechkit_id",
-	                    "https://iam.api.cloud.yandex.net/iam/v1/tokens"};
 	BOOST_TEST_MESSAGE(config.privKeyFile);
 	BOOST_TEST_MESSAGE(config.pubKeyFile);
 	auto token = new cYandexGrpcIamToken(config);
