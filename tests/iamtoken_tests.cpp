@@ -5,22 +5,41 @@
 
 #define TEST 1
 
+#include "tests/config.h"
 #include <boost/test/unit_test.hpp>
 
-#include "yandex_iam_token.h"
+#include "YandexIamToken.h"
+#include "YandexSttSession.h"
 
-BOOST_AUTO_TEST_CASE(connection_test) {
-	ysg_config_t config{"aje95nign4v8tj6cl49f", "ajenj092br8692njemn0", "../conf/speechkit_id.pub",
-	                    "../conf/speechkit_id", "https://iam.api.cloud.yandex.net/iam/v1/tokens"};
+struct fixt {
+	ysg_config_t config{"aje95nign4v8tj6cl49f", "ajenj092br8692njemn0",
+	                    PROJECT_SOURCE_DIR "/conf/speechkit_id.pub",
+	                    PROJECT_SOURCE_DIR "/conf/speechkit_id",
+	                    "https://iam.api.cloud.yandex.net/iam/v1/tokens"};
+};
+
+BOOST_AUTO_TEST_CASE(connection_test)
+{
+	ysg_config_t config{"aje95nign4v8tj6cl49f", "ajenj092br8692njemn0",
+	                    PROJECT_SOURCE_DIR "/conf/speechkit_id.pub",
+	                    PROJECT_SOURCE_DIR "/conf/speechkit_id",
+	                    "https://iam.api.cloud.yandex.net/iam/v1/tokens"};
+	BOOST_TEST_MESSAGE(config.privKeyFile);
+	BOOST_TEST_MESSAGE(config.pubKeyFile);
 	auto token = new cYandexGrpcIamToken(config);
 	BOOST_TEST(token);
 	BOOST_TEST(token->Renew());
-	BOOST_TEST(strlen(token->GetToken()));
+	BOOST_TEST(token->GetToken().length());
 	delete token;
-	auto incorrect_config = config;
-	incorrect_config.pubKeyId = "zzz";
+	const ysg_config_t incorrect_config({config.accId, "zzz", config.pubKeyFile,
+	                                     config.privKeyFile, config.getTokenUrl});
 	auto bad_token = new cYandexGrpcIamToken(incorrect_config);
 	BOOST_TEST(bad_token);
 	BOOST_TEST(!bad_token->Renew());
 	delete bad_token;
+}
+
+BOOST_FIXTURE_TEST_CASE(stt_session_test, fixt)
+{
+
 }

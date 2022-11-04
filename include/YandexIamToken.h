@@ -2,8 +2,8 @@
 // Created by dbori on 13.08.2022.
 //
 
-#ifndef MOD_YANDEX_TRANSCRIBE_YANDEX_IAM_TOKEN_H
-#define MOD_YANDEX_TRANSCRIBE_YANDEX_IAM_TOKEN_H
+#ifndef MOD_YANDEX_TRANSCRIBE_YANDEXIAMTOKEN_H
+#define MOD_YANDEX_TRANSCRIBE_YANDEXIAMTOKEN_H
 
 #include <jwt-cpp/jwt.h>
 #include <sstream>
@@ -27,10 +27,10 @@ class cYandexGrpcIamToken {
 	static size_t read_callback(char *buffer, size_t size, size_t nitems, void *userdata);
 
 public:
-	explicit cYandexGrpcIamToken(ysg_config_t &config);
+	explicit cYandexGrpcIamToken(const ysg_config_t &config);
 	~cYandexGrpcIamToken();
 	time_t Renew();
-	const char *GetToken();
+	string &GetToken();
 };
 
-#endif//MOD_YANDEX_TRANSCRIBE_YANDEX_IAM_TOKEN_H
+#endif//MOD_YANDEX_TRANSCRIBE_YANDEXIAMTOKEN_H

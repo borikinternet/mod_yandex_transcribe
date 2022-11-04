@@ -2,7 +2,7 @@
 // Created by dbori on 13.08.2022.
 //
 
-#include "yandex_iam_token.h"
+#include "YandexIamToken.h"
 #include <chrono>
 #include <date/date.h>
 #include <fstream>
@@ -58,18 +58,22 @@ size_t cYandexGrpcIamToken::read_callback(char *buffer, size_t size, size_t nite
 	return len;
 }
 
-cYandexGrpcIamToken::cYandexGrpcIamToken(ysg_config_t &config) {
-	tokenUrl = string(config.getTokenUrl);
+cYandexGrpcIamToken::cYandexGrpcIamToken(const ysg_config_t &config)
+	: tokenUrl(config.getTokenUrl) {
 	std::ifstream priv_key_file(config.privKeyFile);
 	std::ifstream pub_key_file(config.pubKeyFile);
+
+	// todo fix exception class
+	if (!priv_key_file.good() || !pub_key_file.good())
+		throw exception();
 
 	auto now = std::chrono::system_clock::now();
 	auto expires_at = now + std::chrono::hours(1);
 	auto serviceAccountId = config.accId;
 	auto keyId = config.pubKeyId;
 	auto algorithm = jwt::algorithm::ps256(
-	        std::string(std::istreambuf_iterator<char>{pub_key_file}, {}),
-	        std::string(std::istreambuf_iterator<char>{priv_key_file}, {}));
+		std::string(std::istreambuf_iterator<char>{pub_key_file}, {}),
+		std::string(std::istreambuf_iterator<char>{priv_key_file}, {}));
 
 	// Формирование JWT.
 	encoded_token = jwt::create();
@@ -135,12 +139,12 @@ size_t cYandexGrpcIamToken::write_callback(char *ptr, size_t size, size_t nmemb,
 	auto self = reinterpret_cast<cYandexGrpcIamToken *>(userdata);
 	char buf[CURL_MAX_WRITE_SIZE + 1];
 	char *str = buf;
-	buf[nmemb] = '\0';
-	memcpy(buf, ptr, nmemb);
+	buf[size * nmemb] = '\0';
+	memcpy(buf, ptr, size * nmemb);
 	self->tokenStream << str;
 	return nmemb;
 }
 
-const char *cYandexGrpcIamToken::GetToken() {
-	return bearer.data();
+string &cYandexGrpcIamToken::GetToken() {
+	return bearer;
 }
