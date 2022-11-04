@@ -12,11 +12,11 @@ extern "C" {
 #endif
 
 typedef struct {
-	char *accId;
-	char *pubKeyId;
-	char *pubKeyFile;
-	char *privKeyFile;
-	char *getTokenUrl;
+	const char *accId;
+	const char *pubKeyId;
+	const char *pubKeyFile;
+	const char *privKeyFile;
+	const char *getTokenUrl;
 } ysg_config_t;
 
 switch_status_t init_yandex_grpc(ysg_config_t *config);

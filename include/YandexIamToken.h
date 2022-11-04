@@ -10,7 +10,6 @@
 #include <switch.h>
 #include <switch_curl.h>
 
-#include "yandex/cloud/ai/stt/v3/stt_service.pb.h"
 #include "ytg_bindings.h"
 
 using namespace std;
