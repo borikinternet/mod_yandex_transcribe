@@ -17,6 +17,7 @@ typedef struct {
 	const char *pubKeyFile;
 	const char *privKeyFile;
 	const char *getTokenUrl;
+	const char *sttReceiverHostName;
 } ysg_config_t;
 
 switch_status_t init_yandex_grpc(ysg_config_t *config);
