@@ -11,6 +11,7 @@
 
 #include "YandexIamToken.h"
 #include "YandexSttSession.h"
+#include <date/date.h>
 
 struct fixt {
 	ysg_config_t config{"aje95nign4v8tj6cl49f", "ajenj092br8692njemn0",
@@ -20,15 +21,25 @@ struct fixt {
 	                    "stt.api.cloud.yandex.net:443"};
 };
 
+BOOST_AUTO_TEST_CASE(date_tests) {
+	stringstream expiresAtStr;
+	expiresAtStr << "1970-01-01T01:00:00.000000000Z";
+	date::sys_seconds tps;
+	expiresAtStr >> date::parse("%4FT%H:%M:%12S%Z", tps);
+	BOOST_TEST(tps.time_since_epoch().count() == 3600);
+}
+
 BOOST_FIXTURE_TEST_CASE(connection_test, fixt)
 {
 	BOOST_TEST_MESSAGE(config.privKeyFile);
 	BOOST_TEST_MESSAGE(config.pubKeyFile);
-	auto token = new cYandexGrpcIamToken(config);
-	BOOST_TEST(token);
-	BOOST_TEST(token->Renew());
-	BOOST_TEST(token->GetToken().length());
-	delete token;
+	auto token_ = new cYandexGrpcIamToken(config);
+	BOOST_TEST(token_);
+	BOOST_TEST(token_->Renew());
+	BOOST_TEST(token_->GetToken().length());
+	BOOST_TEST(token_->Renew());
+	BOOST_TEST(token_->GetToken().length());
+	delete token_;
 	const ysg_config_t incorrect_config({config.accId, "zzz", config.pubKeyFile,
 	                                     config.privKeyFile, config.getTokenUrl});
 	auto bad_token = new cYandexGrpcIamToken(incorrect_config);
@@ -39,9 +50,10 @@ BOOST_FIXTURE_TEST_CASE(connection_test, fixt)
 
 BOOST_FIXTURE_TEST_CASE(stt_session_test, fixt)
 {
-	auto token = new cYandexGrpcIamToken(config);
-	token->Renew();
-	auto session = new cYandexSttSession({config.sttReceiverHostName}, token->GetToken(), "some-uuid", 8000);
+	auto token_ = new cYandexGrpcIamToken(config);
+	token_->Renew();
+	std::string host(config.sttReceiverHostName), t_(token_->GetToken());
+	auto session = new cYandexSttSession(host, t_, 8000);
 	BOOST_TEST(session);
 	std::ifstream f(PROJECT_SOURCE_DIR "/tests/speech.pcm", std::ifstream::binary);
 	char buf[16000];
@@ -50,15 +62,19 @@ BOOST_FIXTURE_TEST_CASE(stt_session_test, fixt)
 		cYandexSttSession::Sample z{f.gcount(), buf};
 		(*session) << z;
 		std::this_thread::sleep_for(std::chrono::seconds(1));
-		auto res = session->GetLastResponse();
-		BOOST_TEST_MESSAGE(res.DebugString());
+		auto alts = session->GetAlternatives();
+		if (alts)
+			for (const auto &alt: *alts)
+				BOOST_TEST_MESSAGE(alt);
 	}
 	session->Complete();
 	std::this_thread::sleep_for(std::chrono::seconds(1));
-	auto resp = session->GetLastResponse();
-	BOOST_TEST_MESSAGE(resp.DebugString());
-	for (const auto& res : session->GetAlternatives())
-		BOOST_TEST_MESSAGE(res);
+	{
+		auto alts = session->GetAlternatives();
+		if (alts)
+			for (const auto &res: *alts)
+				BOOST_TEST_MESSAGE(res);
+	}
 	delete session;
-	delete token;
+	delete token_;
 }
