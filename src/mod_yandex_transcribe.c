@@ -35,13 +35,16 @@
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_yandex_transcribe_shutdown);
+
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_yandex_transcribe_runtime);
+
 SWITCH_MODULE_LOAD_FUNCTION(mod_yandex_transcribe_load);
 
 /* SWITCH_MODULE_DEFINITION(name, load, shutdown, runtime)
  * Defines a switch_loadable_module_function_table_t and a static const char[] modname
  */
-SWITCH_MODULE_DEFINITION(mod_yandex_transcribe, mod_yandex_transcribe_load, mod_yandex_transcribe_shutdown, mod_yandex_transcribe_runtime);
+SWITCH_MODULE_DEFINITION(mod_yandex_transcribe, mod_yandex_transcribe_load, mod_yandex_transcribe_shutdown,
+                         mod_yandex_transcribe_runtime);
 
 /*
 typedef enum {
@@ -74,11 +77,16 @@ static struct {
 	int integer;
 	*/
 	threadsafe_flag_t running;
-	char *acc_id, *pub_key_id, *pub_key_fname, *priv_key_fname, *get_token_url;
+	char *acc_id, *pub_key_id, *pub_key_fname, *priv_key_fname, *get_token_url, *recognition_host, *preferred_language;
 	codec_t codec;
+	void *pToken;
 } globals;
 
-static switch_status_t config_callback_siptrace(switch_xml_config_item_t *data, switch_config_callback_type_t callback_type, switch_bool_t changed) {
+static ysg_config_t ysg_config;
+
+static switch_status_t
+config_callback_siptrace(switch_xml_config_item_t *data, switch_config_callback_type_t callback_type,
+                         switch_bool_t changed) {
 	switch_bool_t value = *(switch_bool_t *) data->ptr;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "In siptrace callback: value %s changed %s\n",
 	                  value ? "true" : "false", changed ? "true" : "false");
@@ -95,40 +103,48 @@ static switch_status_t config_callback_siptrace(switch_xml_config_item_t *data, 
 
 static switch_xml_config_string_options_t config_opt_any_string = {NULL, 0, ".*"};
 static switch_xml_config_enum_item_t config_opt_codec_enum[] = {
-        {"opus", CODEC_OPUS},
-        {"l16", CODEC_L16},
-        {NULL, CODEC_UNKNOWN}};
+	{"opus", CODEC_OPUS},
+	{"l16",  CODEC_L16},
+	{NULL,   CODEC_UNKNOWN}};
 
 /* enforce_min, min, enforce_max, max */
 //static switch_xml_config_int_options_t config_opt_integer = {SWITCH_TRUE, 0, SWITCH_TRUE, 10};
 
 static switch_xml_config_item_t instructions[] = {
-        /* parameter name        type                 reloadable   pointer                         default value     options structure */
-        SWITCH_CONFIG_ITEM("yandex-cloud-service-account-id", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.acc_id, "",
-                           &config_opt_any_string, "", "Yandex.Cloud service account id"),
-        SWITCH_CONFIG_ITEM("codec", SWITCH_CONFIG_ENUM, CONFIG_RELOADABLE, &globals.codec, "OPUS",
-                           &config_opt_codec_enum, "opus|l16", "Codec to use for communication with Yandex.Speechkit, may be OPUS or L16"),
-        SWITCH_CONFIG_ITEM("public-key-id", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.pub_key_id, "",
-                           &config_opt_any_string, "", "Yandex.Cloud public key id"),
-        SWITCH_CONFIG_ITEM("public-key-file", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.pub_key_fname, "",
-                           &config_opt_any_string, "", "Downloaded from Yandex.Cloud public key"),
-        SWITCH_CONFIG_ITEM("private-key-file", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.priv_key_fname, "",
-                           &config_opt_any_string, "", "Downloaded from Yandex.Cloud private key"),
-        SWITCH_CONFIG_ITEM("get-iam-token-url", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.get_token_url, "",
-                           &config_opt_any_string, "", "Yandex.Cloud URL where to get fresh token"),
-        /*
-        SWITCH_CONFIG_ITEM_CALLBACK("sip-trace", SWITCH_CONFIG_BOOL, CONFIG_RELOADABLE, &globals.sip_trace, (void *) SWITCH_FALSE,
-                                    (switch_xml_config_callback_t) config_callback_siptrace, NULL,
-                                    "yes|no", "If enabled, print out sip messages on the console."),
-        SWITCH_CONFIG_ITEM("integer", SWITCH_CONFIG_INT, CONFIG_RELOADABLE, &globals.integer, (void *) 100, &config_opt_integer,
-                           NULL, NULL),
+	/* parameter name        type                 reloadable   pointer                         default value     options structure */
+	SWITCH_CONFIG_ITEM("yandex-cloud-service-account-id", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.acc_id, "",
+	                   &config_opt_any_string, "", "Yandex.Cloud service account id"),
+	SWITCH_CONFIG_ITEM("codec", SWITCH_CONFIG_ENUM, CONFIG_RELOADABLE, &globals.codec, "l16",
+	                   &config_opt_codec_enum, "opus|l16",
+	                   "Codec to use for communication with Yandex.Speechkit, may be OPUS or L16"),
+	SWITCH_CONFIG_ITEM("public-key-id", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.pub_key_id, "",
+	                   &config_opt_any_string, "", "Yandex.Cloud public key id"),
+	SWITCH_CONFIG_ITEM("public-key-file", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.pub_key_fname, "",
+	                   &config_opt_any_string, "", "Downloaded from Yandex.Cloud public key"),
+	SWITCH_CONFIG_ITEM("private-key-file", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.priv_key_fname, "",
+	                   &config_opt_any_string, "", "Downloaded from Yandex.Cloud private key"),
+	SWITCH_CONFIG_ITEM("get-iam-token-url", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.get_token_url, "",
+	                   &config_opt_any_string, "", "Yandex.Cloud URL where to get fresh token"),
+	SWITCH_CONFIG_ITEM("recognition-host", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE, &globals.recognition_host,
+	                   "stt.api.cloud.yandex.net:443", &config_opt_any_string, "",
+	                   "Yandex.Cloud stt host in form some.host.fqdn:port"),
+	SWITCH_CONFIG_ITEM("preferred-language", SWITCH_CONFIG_STRING, CONFIG_RELOADABLE,
+	                   &globals.preferred_language, "", &config_opt_any_string, "",
+	                   "Preferred language for recognition model"),
+	/*
+	SWITCH_CONFIG_ITEM_CALLBACK("sip-trace", SWITCH_CONFIG_BOOL, CONFIG_RELOADABLE, &globals.sip_trace, (void *) SWITCH_FALSE,
+								(switch_xml_config_callback_t) config_callback_siptrace, NULL,
+								"yes|no", "If enabled, print out sip messages on the console."),
+	SWITCH_CONFIG_ITEM("integer", SWITCH_CONFIG_INT, CONFIG_RELOADABLE, &globals.integer, (void *) 100, &config_opt_integer,
+					   NULL, NULL),
 */
-        SWITCH_CONFIG_ITEM_END()};
+	SWITCH_CONFIG_ITEM_END()};
 
 static switch_status_t do_config(switch_bool_t reload) {
 	memset(&globals, 0, sizeof(globals));
 
-	if (switch_xml_config_parse_module_settings("yandex-transcribe.conf", reload, instructions) != SWITCH_STATUS_SUCCESS) {
+	if (switch_xml_config_parse_module_settings("yandex-transcribe.conf", reload, instructions) !=
+	    SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Could not open yandex-transcribe.conf.xml\n");
 		return SWITCH_STATUS_FALSE;
 	}
@@ -137,6 +153,8 @@ static switch_status_t do_config(switch_bool_t reload) {
 }
 
 #define MAX_PEERS 128
+
+/*
 SWITCH_STANDARD_API(yandex_transcribe_function) {
 	switch_dial_handle_t *dh;
 	switch_dial_leg_list_t *ll;
@@ -232,7 +250,9 @@ SWITCH_STANDARD_API(yandex_transcribe_function) {
 
 	return SWITCH_STATUS_SUCCESS;
 }
+*/
 
+/*
 static void mycb(switch_core_session_t *session, switch_channel_callstate_t callstate, switch_device_record_t *drec) {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 
@@ -251,43 +271,113 @@ static void mycb(switch_core_session_t *session, switch_channel_callstate_t call
 	                  drec->active_stop ? (uint32_t) (drec->active_stop - drec->active_start) / 1000 : 0,
 	                  switch_channel_test_flag(channel, CF_FINAL_DEVICE_LEG) ? "FINAL LEG" : "");
 }
+*/
 
+switch_status_t
+mod_yandex_transcribe_open(switch_asr_handle_t *pHandle, const char *codec, int sampleRate, const char *dest,
+                           switch_asr_flag_t *flags) {
+	// todo check and get licenses here
+	// todo implement Opus codec use
+	pHandle->codec = switch_core_strdup(pHandle->memory_pool, codec = "L16");
+	if ((pHandle->private_info = create_yandex_stt_session(&ysg_config, sampleRate, globals.pToken)) == NULL) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,
+		                  "Can't initialize Yandex.STT session!\n");
+		return SWITCH_STATUS_FALSE;
+	}
+	return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t mod_yandex_transcribe_check_results(switch_asr_handle_t *pHandle, switch_asr_flag_t *flags) {
+	return check_yandex_stt_results(pHandle->private_info);
+}
+
+switch_status_t
+mod_yandex_transcribe_get_results(switch_asr_handle_t *pHandle, char **resStr, switch_asr_flag_t *flags) {
+	return get_yandex_stt_results(pHandle->private_info, resStr, pHandle->memory_pool);
+}
+
+switch_status_t mod_yandex_transcribe_close(switch_asr_handle_t *pHandle, switch_asr_flag_t *flags) {
+	// todo free license here
+	return destroy_yandex_stt_session(&pHandle->private_info);
+}
+
+switch_status_t mod_yandex_transcribe_feed(switch_asr_handle_t *pHandle, void *data, unsigned int len,
+                                           switch_asr_flag_t *flags) {
+	return feed_to_yandex_stt_session(pHandle->private_info, data, len);
+}
+
+// todo fill next functions with some meaningful content
+switch_status_t
+mod_yandex_transcribe_load_grammar(switch_asr_handle_t *pHandle, const char *grammar, const char *name) {
+	return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t mod_yandex_transcribe_unload_grammar(switch_asr_handle_t *pHandle, const char *grammar) {
+	return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t mod_yandex_transcribe_start_input_timers(switch_asr_handle_t *pHandle) {
+	return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t mod_yandex_transcribe_pause(switch_asr_handle_t *pHandle) {
+	return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t mod_yandex_transcribe_resume(switch_asr_handle_t *pHandle) {
+	return SWITCH_STATUS_SUCCESS;
+}
 
 /* Macro expands to: switch_status_t mod_yandex_transcribe_load(switch_loadable_module_interface_t **module_interface, switch_memory_pool_t *pool) */
 SWITCH_MODULE_LOAD_FUNCTION(mod_yandex_transcribe_load) {
-	switch_api_interface_t *api_interface;
+//	switch_api_interface_t *api_interface;
 	/* connect my internal structure to the blank pointer passed to me */
 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
 
-//	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Hello World!\n");
-
 	do_config(SWITCH_FALSE);
 
-	ysg_config_t ysg_config = {
-	        globals.acc_id,
-	        globals.pub_key_id,
-	        globals.pub_key_fname,
-	        globals.priv_key_fname,
-	        globals.get_token_url};
+	ysg_config.accId = globals.acc_id;
+	ysg_config.pubKeyId = globals.pub_key_id;
+	ysg_config.pubKeyFile = globals.pub_key_fname;
+	ysg_config.privKeyFile = globals.priv_key_fname;
+	ysg_config.getTokenUrl = globals.get_token_url;
+	ysg_config.sttReceiverHostName = globals.recognition_host;
+	ysg_config.preferredLanguage = globals.preferred_language;
 
 	if (switch_thread_rwlock_create(&globals.running.locker, pool) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize rwlock in mod_yandex_transcribe!\n");
 		return SWITCH_STATUS_FALSE;
 	}
 
-	if (init_yandex_grpc(&ysg_config) != SWITCH_STATUS_SUCCESS) {
+	if (init_yandex_grpc(&ysg_config, &globals.pToken) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Can't initialize mod_yandex_transcribe!\n");
 		return SWITCH_STATUS_FALSE;
 	}
 
 	// todo fix tip
-	SWITCH_ADD_API(api_interface, "yandex_transcribe", " API", yandex_transcribe_function, "syntax");
+	//	SWITCH_ADD_API(api_interface, "yandex_transcribe", " API", yandex_transcribe_function, "syntax");
 
-	switch_channel_bind_device_state_handler(mycb, NULL);
+//	switch_channel_bind_device_state_handler(mycb, NULL);
 
 	switch_thread_rwlock_wrlock(globals.running.locker);
 	globals.running.flag = TRUE;
 	switch_thread_rwlock_unlock(globals.running.locker);
+
+	switch_asr_interface_t *asr_interface;
+	asr_interface = switch_loadable_module_create_interface(*module_interface, SWITCH_ASR_INTERFACE);
+	asr_interface->interface_name = "yandex_transcribe";
+	asr_interface->asr_open = mod_yandex_transcribe_open;
+	asr_interface->asr_check_results = mod_yandex_transcribe_check_results;
+	asr_interface->asr_get_results = mod_yandex_transcribe_get_results;
+	asr_interface->asr_close = mod_yandex_transcribe_close;
+	asr_interface->asr_feed = mod_yandex_transcribe_feed;
+
+	// empty functions
+	asr_interface->asr_load_grammar = mod_yandex_transcribe_load_grammar;
+	asr_interface->asr_unload_grammar = mod_yandex_transcribe_unload_grammar;
+	asr_interface->asr_start_input_timers = mod_yandex_transcribe_start_input_timers;
+	asr_interface->asr_pause = mod_yandex_transcribe_pause;
+	asr_interface->asr_resume = mod_yandex_transcribe_resume;
 
 	/* indicate that the module should continue to be loaded */
 	return SWITCH_STATUS_SUCCESS;
@@ -298,12 +388,12 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_yandex_transcribe_load) {
   Macro expands to: switch_status_t mod_yandex_transcribe_shutdown() */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_yandex_transcribe_shutdown) {
 	/* Cleanup dynamically allocated config settings */
-	switch_channel_unbind_device_state_handler(mycb);
+//	switch_channel_unbind_device_state_handler(mycb);
 	switch_xml_config_cleanup(instructions);
 	switch_thread_rwlock_wrlock(globals.running.locker);
 	globals.running.flag = FALSE;
-	switch_thread_rwlock_unlock(globals.running.locker);
-	return SWITCH_STATUS_SUCCESS;
+	destroy_yandex_grpc(&globals.pToken);
+	return switch_thread_rwlock_unlock(globals.running.locker);
 }
 
 
@@ -315,13 +405,21 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_yandex_transcribe_shutdown) {
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_yandex_transcribe_runtime) {
 	switch_thread_rwlock_rdlock(globals.running.locker);
 	while (globals.running.flag) {
-		switch_thread_rwlock_unlock(globals.running.locker);
 		time_t token_lifetime = 0;
-		if ((token_lifetime = get_iam_token()) == 0) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Can't get IAM token from Yandex.Cloud! Will try again in 60 sec\n");
-			switch_sleep(60 * 1000 * 1000);// wait for 60 sec
+		if ((token_lifetime = renew_iam_token(globals.pToken)) <= 0) {
+			switch_thread_rwlock_unlock(globals.running.locker);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING,
+			                  "Can't get IAM token from Yandex.Cloud! Will try again in 60 sec\n");
+			switch_sleep(60 * 1000 * 1000);// wait  for 60 sec
 		} else {
-			switch_sleep(token_lifetime / 2 * 1000 * 1000);// wait for half of token lifetime
+			token_lifetime /= 2; // wait for half of token lifetime
+			while (token_lifetime > 0 && globals.running.flag) {
+				switch_thread_rwlock_unlock(globals.running.locker);
+				switch_sleep(1000 * 1000);
+				--token_lifetime;
+				switch_thread_rwlock_rdlock(globals.running.locker);
+			}
+			switch_thread_rwlock_unlock(globals.running.locker);
 		}
 		switch_thread_rwlock_rdlock(globals.running.locker);
 	}

@@ -2,9 +2,11 @@
     <settings>
         <param name="yandex-cloud-service-account-id" value="aje95nign4v8tj6cl49f"/>
         <param name="public-key-id" value="ajenj092br8692njemn0"/>
-        <param name="public-key-file" value="speechkit_id.pub"/>
-        <param name="private-key-file" value="speechkit_id"/>
+        <param name="public-key-file" value="/etc/freeswitch/speechkit_id.pub"/>
+        <param name="private-key-file" value="/etc/freeswitch/speechkit_id"/>
         <param name="get-iam-token-url" value="https://iam.api.cloud.yandex.net/iam/v1/tokens"/>
         <param name="codec" value="l16"/>
+        <param name="preferred-language" value="ru-RU"/>
+        <param name="recognition-host" value="stt.api.cloud.yandex.net:443"/>
     </settings>
 </configuration>
